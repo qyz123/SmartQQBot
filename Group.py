@@ -12,6 +12,7 @@ from Msg import *
 from plugin import shuishiwodi, shuishiwodiStartStatus
 from plugin.weather import Weather
 from plugin.Turing import Turing
+from plugin.DocomoAI import DocomoAI
 
 logging.basicConfig(
     filename='smartqq.log',
@@ -45,19 +46,20 @@ class Group:
         self.private_config = GroupConfig(self)
         self.update_config()
         self.process_order = [
-            "game",
-            "weather",
-            'ask',
-            "follow",
-            "repeat",
-            "callout",
-            "command_0arg",
-            "command_1arg",
-            "tucao",
+            "docomo_ai",
+            # "game",
+            # "weather",
+            # 'ask',
+            # "follow",
+            # "repeat",
+            # "callout",
+            # "command_0arg",
+            # "command_1arg",
+            # "tucao",
         ]
         self.__game_handler = None
         logging.info("RUNTIMELOG " + str(self.gid) + "群已激活, 当前执行顺序： " + str(self.process_order))
-        self.tucao_load()
+        # self.tucao_load()
 
     def update_config(self):
         self.private_config.update()
@@ -115,196 +117,208 @@ class Group:
         self.msg_id += 1
         self.__operator.send_sess_msg2_fromGroup(self.guin, tuin, reply_content, self.msg_id, service_type)
 
-    def command_0arg(self, msg):
-        # webqq接受的消息会以空格结尾
-        match = re.match(r'^(?:!|！)([^\s\{\}]+)\s*$', msg.content)
-        if match:
-            command = str(match.group(1))
-            logging.info("RUNTIMELOG command format detected, command: " + command)
 
-            if command == "吐槽列表":
-                self.show_tucao_list()
-                return True
-
-        return False
-
-    def command_1arg(self, msg):
-        match = re.match(r'^(?:!|！)([^\s\{\}]+)(?:\s?)\{([^\s\{\}]+)\}\s*$', msg.content)
-        if match:
-            command = str(match.group(1))
-            arg1 = str(match.group(2))
-            logging.info("RUNTIMELOG command format detected, command:{0}, arg1:{1}".format(command, arg1))
-            if command == "删除关键字" and unicode(arg1) in self.tucao_dict:
-                self.tucao_dict.pop(unicode(arg1))
-                self.reply("已删除关键字:{0}".format(arg1))
-                self.tucao_save()
-                return True
-
-        return False
-
-    def show_tucao_list(self):
-        result = ""
-        for key in self.tucao_dict:
-            result += "关键字：{0}      回复：{1}\n".format(key, " / ".join(self.tucao_dict[key]))
-        logging.info("RUNTIMELOG Replying the list of tucao")
-        self.reply(result)
-
-    def callout(self, msg):
-        if "智障机器人" in msg.content:
-            logging.info("RUNTIMELOG " + str(self.gid) + " calling me out, trying to reply....")
-            self.reply("干嘛（‘·д·）")
+    def docomo_ai(self, msg):
+        if "@みさと" in msg.content:
+            query=DocomoAI()
+            # result=query.getAITalk(msg)
+            result=query.getAIAsk(msg)
+            self.reply(result)
             return True
+
         return False
 
-    def repeat(self, msg):
-        if len(self.msg_list) > 0 and self.msg_list[-1].content == msg.content:
-            if str(msg.content).strip() not in ("", " ", "[图片]", "[表情]"):
-                logging.info("RUNTIMELOG " + str(self.gid) + " repeating, trying to reply " + str(msg.content))
-                self.reply(msg.content)
-                return True
-        return False
 
-    def tucao(self, msg):
-        match = re.match(r'^(?:!|！)(learn|delete)(?:\s?){(.+)}(?:\s?){(.+)}', msg.content)
-        if match:
-            logging.info("RUNTIMELOG tucao command detected.")
-            command = str(match.group(1)).decode('utf8')
-            key = str(match.group(2)).decode('utf8')
-            value = str(match.group(3)).decode('utf8')
-            if command == 'learn':
-                if key in self.tucao_dict and value not in self.tucao_dict[key]:
-                    self.tucao_dict[key].append(value)
-                else:
-                    self.tucao_dict[key] = [value]
-                self.reply("学习成功！快对我说" + str(key) + "试试吧！")
-                self.tucao_save()
-                return True
-
-            elif command == 'delete':
-                if key in self.tucao_dict and self.tucao_dict[key].count(value):
-                    self.tucao_dict[key].remove(value)
-                    self.reply("呜呜呜我再也不说" + str(value) + "了")
-                    self.tucao_save()
-                    return True
-        else:
-            for key in self.tucao_dict.keys():
-                if str(key) in msg.content and self.tucao_dict[key]:
-                    logging.info("RUNTIMELOG tucao pattern detected, replying...")
-                    self.reply(random.choice(self.tucao_dict[key]))
-                    return True
-        return False
-
-    def tucao_save(self):
-        try:
-            tucao_file_path = str(self.global_config.conf.get('global', 'tucao_path')) + str(self.gid) + ".tucao"
-            with open(tucao_file_path, "w+") as tucao_file:
-                cPickle.dump(self.tucao_dict, tucao_file)
-            logging.info("RUNTIMELOG tucao saved. Now tucao list:  {0}".format(str(self.tucao_dict)))
-        except Exception:
-            logging.error("RUNTIMELOG Fail to save tucao.")
-            raise IOError("Fail to save tucao.")
-
-    def tucao_load(self):
-        # try:
-        tucao_file_path = str(self.global_config.conf.get('global', 'tucao_path'))
-        tucao_file_name = tucao_file_path + str(self.gid) + ".tucao"
-        if not os.path.isdir(tucao_file_path):
-            os.makedirs(tucao_file_path)
-        if not os.path.exists(tucao_file_name):
-            with open(tucao_file_name, "w") as tmp:
-                tmp.close()
-        with open(tucao_file_name, "r") as tucao_file:
-            try:
-                self.tucao_dict = cPickle.load(tucao_file)
-                logging.info("RUNTIMELOG tucao loaded. Now tucao list:  {0}".format(str(self.tucao_dict)))
-            except EOFError:
-                logging.info("RUNTIMELOG tucao file is empty.")
-                # except Exception as er:
-                #     logging.error("Fail to load tucao:  ", er)
-                #     raise IOError("Fail to load tucao:  ", er)
-
-    def follow(self, msg):
-        match = re.match(r'^(?:!|！)(follow|unfollow) (\d+|me)', msg.content)
-        if match:
-            logging.info("RUNTIMELOG following...")
-            command = str(match.group(1))
-            target = str(match.group(2))
-            if target == 'me':
-                target = str(self.__operator.uin_to_account(msg.send_uin))
-
-            if command == 'follow' and target not in self.follow_list:
-                self.follow_list.append(target)
-                self.reply("我开始关注" + target + "啦")
-                return True
-            elif command == 'unfollow' and target in self.follow_list:
-                self.follow_list.remove(target)
-                self.reply("我不关注" + target + "了")
-                return True
-        else:
-            if str(self.__operator.uin_to_account(msg.send_uin)) in self.follow_list:
-                self.reply(msg.content)
-                return True
-        return False
-
-    def weather(self, msg):
-        match = re.match(ur'^(weather|天气) (\w+|[\u4e00-\u9fa5]+)', msg.content)
-        if match:
-            logging.info("RUNTIMELOG 查询天气...")
-            command = match.group(1)
-            city = match.group(2)
-            logging.info("RUNTIMELOG 查询天气语句: " + msg.content)
-            if command == 'weather' or command == u'天气':
-                query = Weather()
-                info = query.getWeatherOfCity(city)
-                logging.info("RESPONSE " + str(info))
-                self.reply(str(info))
-                return True
-        return False
-
-    def ask(self, msg):
-        match = re.match(ur'^(ask|问) (\w+|[\u4e00-\u9fa5]+)', msg.content)
-        if match:
-            # logging.info("问答测试...")
-            print msg.content
-            command = match.group(1)
-            info = match.group(2)
-            # logging.info("info:")
-            logging.info("RUNTIMELOG 图灵问答语句: " + msg.content)
-            # print info
-            if command == 'ask' or command == u'问':
-                # self.reply("我开始查询" + city + "的天气啦")
-                query = Turing()
-                info = query.getReply(info)
-                logging.info("RESPONSE " + str(info))
-                self.reply(str(info))
-                return True
-        return False
-
-    def game(self, msg):
-        match = re.match(ur'^(?:!|！)(game)\s*(\w+|[\u4e00-\u9fa5]+)?', msg.content)
-        if match:
-            command = str(match.group(1))
-            args1 = match.group(2)
-            if not args1:
-                self.reply('玩游戏：!game 开始谁是卧底5人局\n结束游戏：!game end')
-                return True
-            if args1 == 'end':
-                if self.__game_handler and self.__game_handler.statusHandle:
-                    self.__game_handler.statusHandle = None
-                self.__game_handler = None
-                self.reply('游戏结束')
-                return True
-            if args1 and u'谁是卧底' in args1:
-                self.__game_handler = shuishiwodi(shuishiwodiStartStatus(), self)
-                self.__game_handler.run(msg)
-                return True
-            return True
-        # 没有处理程序时退出
-        if not self.__game_handler:
-            return False
-        # 谁是卧底的处理程序
-        if isinstance(self.__game_handler, shuishiwodi):
-            if self.__game_handler.status not in ['StartStatus', 'EndStatus']:
-                self.__game_handler.run(msg)
-                return True  # 游戏期间屏蔽其他处理过程
-        return False
+    # def command_0arg(self, msg):
+    #     # webqq接受的消息会以空格结尾
+    #     match = re.match(r'^(?:!|！)([^\s\{\}]+)\s*$', msg.content)
+    #     if match:
+    #         command = str(match.group(1))
+    #         logging.info("RUNTIMELOG command format detected, command: " + command)
+    #
+    #         if command == "吐槽列表":
+    #             self.show_tucao_list()
+    #             return True
+    #
+    #     return False
+    #
+    # def command_1arg(self, msg):
+    #     match = re.match(r'^(?:!|！)([^\s\{\}]+)(?:\s?)\{([^\s\{\}]+)\}\s*$', msg.content)
+    #     if match:
+    #         command = str(match.group(1))
+    #         arg1 = str(match.group(2))
+    #         logging.info("RUNTIMELOG command format detected, command:{0}, arg1:{1}".format(command, arg1))
+    #         if command == "删除关键字" and unicode(arg1) in self.tucao_dict:
+    #             self.tucao_dict.pop(unicode(arg1))
+    #             self.reply("已删除关键字:{0}".format(arg1))
+    #             self.tucao_save()
+    #             return True
+    #
+    #     return False
+    #
+    # def show_tucao_list(self):
+    #     result = ""
+    #     for key in self.tucao_dict:
+    #         result += "关键字：{0}      回复：{1}\n".format(key, " / ".join(self.tucao_dict[key]))
+    #     logging.info("RUNTIMELOG Replying the list of tucao")
+    #     self.reply(result)
+    #
+    # def callout(self, msg):
+    #     if "智障机器人" in msg.content:
+    #         logging.info("RUNTIMELOG " + str(self.gid) + " calling me out, trying to reply....")
+    #         self.reply("干嘛（‘·д·）")
+    #         return True
+    #     return False
+    #
+    # def repeat(self, msg):
+    #     if len(self.msg_list) > 0 and self.msg_list[-1].content == msg.content:
+    #         if str(msg.content).strip() not in ("", " ", "[图片]", "[表情]"):
+    #             logging.info("RUNTIMELOG " + str(self.gid) + " repeating, trying to reply " + str(msg.content))
+    #             self.reply(msg.content)
+    #             return True
+    #     return False
+    #
+    # def tucao(self, msg):
+    #     match = re.match(r'^(?:!|！)(learn|delete)(?:\s?){(.+)}(?:\s?){(.+)}', msg.content)
+    #     if match:
+    #         logging.info("RUNTIMELOG tucao command detected.")
+    #         command = str(match.group(1)).decode('utf8')
+    #         key = str(match.group(2)).decode('utf8')
+    #         value = str(match.group(3)).decode('utf8')
+    #         if command == 'learn':
+    #             if key in self.tucao_dict and value not in self.tucao_dict[key]:
+    #                 self.tucao_dict[key].append(value)
+    #             else:
+    #                 self.tucao_dict[key] = [value]
+    #             self.reply("学习成功！快对我说" + str(key) + "试试吧！")
+    #             self.tucao_save()
+    #             return True
+    #
+    #         elif command == 'delete':
+    #             if key in self.tucao_dict and self.tucao_dict[key].count(value):
+    #                 self.tucao_dict[key].remove(value)
+    #                 self.reply("呜呜呜我再也不说" + str(value) + "了")
+    #                 self.tucao_save()
+    #                 return True
+    #     else:
+    #         for key in self.tucao_dict.keys():
+    #             if str(key) in msg.content and self.tucao_dict[key]:
+    #                 logging.info("RUNTIMELOG tucao pattern detected, replying...")
+    #                 self.reply(random.choice(self.tucao_dict[key]))
+    #                 return True
+    #     return False
+    #
+    # def tucao_save(self):
+    #     try:
+    #         tucao_file_path = str(self.global_config.conf.get('global', 'tucao_path')) + str(self.gid) + ".tucao"
+    #         with open(tucao_file_path, "w+") as tucao_file:
+    #             cPickle.dump(self.tucao_dict, tucao_file)
+    #         logging.info("RUNTIMELOG tucao saved. Now tucao list:  {0}".format(str(self.tucao_dict)))
+    #     except Exception:
+    #         logging.error("RUNTIMELOG Fail to save tucao.")
+    #         raise IOError("Fail to save tucao.")
+    #
+    # def tucao_load(self):
+    #     # try:
+    #     tucao_file_path = str(self.global_config.conf.get('global', 'tucao_path'))
+    #     tucao_file_name = tucao_file_path + str(self.gid) + ".tucao"
+    #     if not os.path.isdir(tucao_file_path):
+    #         os.makedirs(tucao_file_path)
+    #     if not os.path.exists(tucao_file_name):
+    #         with open(tucao_file_name, "w") as tmp:
+    #             tmp.close()
+    #     with open(tucao_file_name, "r") as tucao_file:
+    #         try:
+    #             self.tucao_dict = cPickle.load(tucao_file)
+    #             logging.info("RUNTIMELOG tucao loaded. Now tucao list:  {0}".format(str(self.tucao_dict)))
+    #         except EOFError:
+    #             logging.info("RUNTIMELOG tucao file is empty.")
+    #             # except Exception as er:
+    #             #     logging.error("Fail to load tucao:  ", er)
+    #             #     raise IOError("Fail to load tucao:  ", er)
+    #
+    # def follow(self, msg):
+    #     match = re.match(r'^(?:!|！)(follow|unfollow) (\d+|me)', msg.content)
+    #     if match:
+    #         logging.info("RUNTIMELOG following...")
+    #         command = str(match.group(1))
+    #         target = str(match.group(2))
+    #         if target == 'me':
+    #             target = str(self.__operator.uin_to_account(msg.send_uin))
+    #
+    #         if command == 'follow' and target not in self.follow_list:
+    #             self.follow_list.append(target)
+    #             self.reply("我开始关注" + target + "啦")
+    #             return True
+    #         elif command == 'unfollow' and target in self.follow_list:
+    #             self.follow_list.remove(target)
+    #             self.reply("我不关注" + target + "了")
+    #             return True
+    #     else:
+    #         if str(self.__operator.uin_to_account(msg.send_uin)) in self.follow_list:
+    #             self.reply(msg.content)
+    #             return True
+    #     return False
+    #
+    # def weather(self, msg):
+    #     match = re.match(ur'^(weather|天气) (\w+|[\u4e00-\u9fa5]+)', msg.content)
+    #     if match:
+    #         logging.info("RUNTIMELOG 查询天气...")
+    #         command = match.group(1)
+    #         city = match.group(2)
+    #         logging.info("RUNTIMELOG 查询天气语句: " + msg.content)
+    #         if command == 'weather' or command == u'天气':
+    #             query = Weather()
+    #             info = query.getWeatherOfCity(city)
+    #             logging.info("RESPONSE " + str(info))
+    #             self.reply(str(info))
+    #             return True
+    #     return False
+    #
+    # def ask(self, msg):
+    #     match = re.match(ur'^(ask|问) (\w+|[\u4e00-\u9fa5]+)', msg.content)
+    #     if match:
+    #         # logging.info("问答测试...")
+    #         print msg.content
+    #         command = match.group(1)
+    #         info = match.group(2)
+    #         # logging.info("info:")
+    #         logging.info("RUNTIMELOG 图灵问答语句: " + msg.content)
+    #         # print info
+    #         if command == 'ask' or command == u'问':
+    #             # self.reply("我开始查询" + city + "的天气啦")
+    #             query = Turing()
+    #             info = query.getReply(info)
+    #             logging.info("RESPONSE " + str(info))
+    #             self.reply(str(info))
+    #             return True
+    #     return False
+    #
+    # def game(self, msg):
+    #     match = re.match(ur'^(?:!|！)(game)\s*(\w+|[\u4e00-\u9fa5]+)?', msg.content)
+    #     if match:
+    #         command = str(match.group(1))
+    #         args1 = match.group(2)
+    #         if not args1:
+    #             self.reply('玩游戏：!game 开始谁是卧底5人局\n结束游戏：!game end')
+    #             return True
+    #         if args1 == 'end':
+    #             if self.__game_handler and self.__game_handler.statusHandle:
+    #                 self.__game_handler.statusHandle = None
+    #             self.__game_handler = None
+    #             self.reply('游戏结束')
+    #             return True
+    #         if args1 and u'谁是卧底' in args1:
+    #             self.__game_handler = shuishiwodi(shuishiwodiStartStatus(), self)
+    #             self.__game_handler.run(msg)
+    #             return True
+    #         return True
+    #     # 没有处理程序时退出
+    #     if not self.__game_handler:
+    #         return False
+    #     # 谁是卧底的处理程序
+    #     if isinstance(self.__game_handler, shuishiwodi):
+    #         if self.__game_handler.status not in ['StartStatus', 'EndStatus']:
+    #             self.__game_handler.run(msg)
+    #             return True  # 游戏期间屏蔽其他处理过程
+    #     return False
