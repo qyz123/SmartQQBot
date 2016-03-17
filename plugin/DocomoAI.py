@@ -14,7 +14,7 @@ class DocomoAI:
         try:
             url = "https://api.apigw.smt.docomo.ne.jp/dialogue/v1/dialogue?APIKEY=%s" % self.APIKEY
             payload = {
-                "utt": msg.content.replace('@みさと',''),
+                "utt": msg.content.replace('@にゃ娘',''),
                 # "context": "%s" % msg.from_uin,
                 # "user":"%s" % msg.from_uin,
                 "nickname": "美里",
@@ -40,7 +40,7 @@ class DocomoAI:
             return ""
 
     def getAIAsk(self,msg):
-        msgstring = "%s" % msg.content.replace('@みさと','')
+        msgstring = "%s" % msg.content.replace('@にゃ娘','')
         #q=urllib.urlencode(msgstring.encode('utf8'))
         msgstring = urllib2.quote(msgstring.encode("utf-8"))
         url = "https://api.apigw.smt.docomo.ne.jp/knowledgeQA/v1/ask?APIKEY=%s&q=%s" % (self.APIKEY ,msgstring)
@@ -59,7 +59,7 @@ class DocomoAI:
             #logging.debug("getAIAsk: " +
             #jsonResult['message']['textForDisplay'])
         else:
-            return jsonResult['message']['textForDisplay']
+            return self.getAITalk(msg)
 
         return  ""
      

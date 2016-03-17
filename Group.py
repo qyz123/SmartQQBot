@@ -119,7 +119,7 @@ class Group:
 
 
     def docomo_ai(self, msg):
-        if "@みさと" in msg.content:
+        if "@にゃ娘" in msg.content:
             query=DocomoAI()
             # result=query.getAITalk(msg)
             result=query.getAIAsk(msg)
